@@ -1,3 +1,3 @@
 # Go
- 
-example data file :
+Please execute run.py
+example data file : rawTri
