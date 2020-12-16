@@ -1,4 +1,5 @@
 import numpy as np
+import math
 import random
 
 
@@ -16,10 +17,59 @@ def cosCorner(z1,z2,z3):
 
 
 class GOPack:
+
+
     def __init__(self):
         self.alpha=None
+        self.gamma=0
     def riffle(self,passNum):
         self.continueRiffle(passNum)
+        self.centers=self.localcenters
+        self.radii=self.localradii
+
+    def readObj(self,fname):
+        tri = []
+        with open(fname) as fp:
+            for line in fp:
+                if (line.startswith("f")):
+                    tri.append(list(map(int, line.strip().split()[1:])))
+        tri = np.array(tri)-1
+        self.parse_triangles(tri)
+        self.indxMatrices()
+        self.mode = 1
+        return self.nodeCount
+
+    def loadTangency(self):
+        tcount = 0
+        for v in range(self.nodeCount):
+            flower = self.flowers[v]
+            n = len(flower)
+            if (flower[0] == flower[-1]):
+                n = n - 1
+            for j in range(n):
+                k = flower[j]
+                if k > v:
+                    tcount = tcount + 1
+
+        T = np.zeros(tcount,dtype=complex)
+
+        #Find the tangency points
+        tick = 0
+        for v in range(self.nodeCount):
+            flower = self.flowers[v]
+            n = len(flower)
+            if (flower[0] == flower[-1]):
+                n = n - 1
+            Z = self.centers[v]
+            R = self.radii[v]
+            for j in range(n):
+                w = flower[j]
+                if w > v:
+                    W = self.centers[w]
+                    s = self.radii[w] + R
+                    T[tick] = Z + (R / s) * (W - Z)
+                    tick = tick + 1
+        return T
 
     def continueRiffle(self,passNum):
         cutval=0.01
@@ -31,7 +81,7 @@ class GOPack:
             self.setEffective()
             pass0+=1
             # print(pass0)
-            break
+            #break
 
     def setEffective(self):
         #interior adjustments
@@ -205,6 +255,19 @@ class GOPack:
         self.setHoroCenters()
 
     def setHoroCenters(self):
+
+        if self.bdryCount <= 3 :
+            s3 = math.sqrt(3)
+            brad = s3 / (2 + s3)
+            for i in range(3):
+                self.localradii[self.bdryList[i]] = brad
+                self.vAims[self.bdryList[i]] = 0.0; # aim to zero so radii not adjusted
+            # centers equally spaced
+            self.localcenters[self.bdryList[0]] = (1 - brad) * 1j;
+            self.localcenters[self.bdryList[1]] = (1 - brad) * (-math.sqrt(3) / 2 - (1 / 2) * 1j)
+            self.localcenters[self.bdryList[2]] = (1 - brad) * (math.sqrt(3) / 2 - (1 / 2) * 1j)
+            return
+
         # initial for R: (sum of bdry radii) / pi
         R = 0.0
         minrad = 0.0
@@ -371,12 +434,12 @@ class GOPack:
                             faceOrder[next_face] = 1
                         if (w > -1):
                             front = front + 1
-                            preflower[front] = w;
+                            preflower[front] = w
                             if (utilFlag[w] == -9): # first encounter for w?
                                 utilFlag[w] = next_face
 
                             hit = 1
-                            nodefaces[target][i] = -1; # this face has been used
+                            nodefaces[target][i] = -1 # this face has been used
 
             #done with forward direction
 
@@ -400,11 +463,11 @@ class GOPack:
                                 v = wa
                                 faceOrder[next_face] = 1
                             elif (wa == w): # must reverse this face
-                                v = wb;
+                                v = wb
                                 holdv = tList[next_face, 0]
                                 tList[next_face, 0] = tList[next_face, 1]
                                 tList[next_face, 1] = holdv
-                                faceOrder[next_face] = 1;
+                                faceOrder[next_face] = 1
 
                             if (v > -1):
                                 back = back - 1
@@ -412,7 +475,7 @@ class GOPack:
                                 if (utilFlag[v] == -9): # first encounter for v?
                                     utilFlag[v] = next_face
                                 hit = 1
-                                nodefaces[target][i] = -1;  # this face has been used
+                                nodefaces[target][i] = -1  # this face has been used
             #done with backward
 
             # done with target; fix up its tmpflower and mark as bdry / int
@@ -423,10 +486,10 @@ class GOPack:
                 utilFlag[target] = -2 # bdry
 
             # find the next vertex encountered but not done.
-            target = -1;
+            target = -1
             for v in range(top+1):
                 if (utilFlag[v] > -1):
-                    target = v;
+                    target = v
                     break
 
             #break
@@ -439,7 +502,7 @@ class GOPack:
         nextv = 0
         while (nextv <= top):
             if (utilFlag[nextv] < 0): # % should have a flower for nextv
-                tick = tick + 1;
+                tick = tick + 1
                 newIndx[nextv] = tick
                 oldIndx[tick] = nextv
 
@@ -461,16 +524,16 @@ class GOPack:
                 self.vNum[v] = n - 1
                 newflower = np.zeros(n, dtype=int)
                 for i in range(n):
-                    oldv = tmpflower[nextv][i];
+                    oldv = tmpflower[nextv][i]
                     newflower[i] = newIndx[oldv]
-                self.flowers[v] = newflower;
+                self.flowers[v] = newflower
                 if (utilFlag[nextv] == -2): # bdry
-                    bdryCount = bdryCount + 1;
-                    self.gamma = v; # set gamma
-                    self.vAims[v] = -1.0;
+                    bdryCount = bdryCount + 1
+                    self.gamma = v # set gamma
+                    self.vAims[v] = -1.0
                 else: #interior
                     self.vAims[v] = 2 * np.pi
-            nextv = nextv + 1;
+            nextv = nextv + 1
 
         #if alpha not already set, choose deep alpha
         if (self.alpha==None or self.alpha[0] == 0):
@@ -478,13 +541,13 @@ class GOPack:
             tick = 0
             for j in range(self.nodeCount):
                 if (utilFlag[j] == -2): #bdry
-                    seeds[tick] = j;
-                    tick = tick + 1;
+                    seeds[tick] = j
+                    tick = tick + 1
 
 
 
             # find an alpha far from seed
-            if (tick > 1):
+            if (tick > 0):
                 seeds = seeds[0:tick] # trim 'seeds'
                 #print(seeds)
 
@@ -495,8 +558,8 @@ class GOPack:
                 else:
                     self.alpha = alpha
 
-            else: # sphere? set 'alpha' to 1
-                self.alpha = 1
+            else: # sphere? set 'alpha' to 0
+                self.alpha = 0
 
         #organize combinatorics
 
@@ -564,7 +627,7 @@ class GOPack:
         if (not hasbdry):
             self.hes = 1
             # cclw faux bdry {a, b, c}, some face far from alpha
-            a = self.FarVert([self.alpha])
+            a = self.FarVert(np.array([self.alpha]))
             flower = self.flowers[a]
             b = flower[1]
             c = flower[0]
@@ -748,15 +811,16 @@ class GOPack:
         farvert = seeds[0]
         nothits = nodecount
         while (nextlist.shape[0]!=0 and (gennum < 10 or nothits < 100)):
-            # debug fprintf('gennum=%d\n', gennum);
             getnonz = 0
             for j in range(nextlist.shape[0]):
-                if (nextlist[j] > 0):
+                if (nextlist[j] > -1):
                     getnonz = getnonz + 1
 
 
             curr = nextlist[0:getnonz+1]
-            nextlist = np.zeros(getnonz * 5,dtype=int)
+            #nextlist = np.full(getnonz * 5,-1,dtype=int)
+            nextlist = np.full(getnonz * 10, -1, dtype=int)
+
             nextend = 0
             for j in range(curr.shape[0]):
                 k = curr[j]
@@ -765,13 +829,14 @@ class GOPack:
 
                 marks[k] = gennum
                 farvert = k
-                #print(k)
                 flower = self.flowers[k]
+                #print(flower)
                 for m in range(len(flower)):
                     p = flower[m]
                     if (marks[p] == 0):
-                        nextlist[nextend ] = p
+                        nextlist[nextend] = p
                         nextend = nextend + 1
+                        #print(nextend)
 
             nextlist = nextlist[0:nextend] # trim zeros
             #print("nextlist",nextlist)
